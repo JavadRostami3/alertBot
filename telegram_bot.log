@@ -1,0 +1,87 @@
+2025-05-27 14:02:03 - telegram_ui_bot - INFO - ==================================================
+2025-05-27 14:02:03 - telegram_ui_bot - INFO - Telegram UI Bot Logger Initialized
+2025-05-27 14:02:03 - telegram_ui_bot - INFO - Timestamp: 2025-05-27 14:02:03
+2025-05-27 14:02:03 - telegram_ui_bot - INFO - ==================================================
+2025-05-27 14:02:03 - telegram_ui_bot - INFO - Configuration loaded and validated successfully
+2025-05-27 14:02:08 - telegram_ui_bot - INFO - ==================================================
+2025-05-27 14:02:08 - telegram_ui_bot - INFO - Telegram UI Bot Logger Initialized
+2025-05-27 14:02:08 - telegram_ui_bot - INFO - Timestamp: 2025-05-27 14:02:08
+2025-05-27 14:02:08 - telegram_ui_bot - INFO - ==================================================
+2025-05-27 14:02:08 - telegram_ui_bot - INFO - Configuration loaded and validated successfully
+2025-05-27 14:02:32 - telegram_ui_bot - INFO - ==================================================
+2025-05-27 14:02:32 - telegram_ui_bot - INFO - Telegram UI Bot Logger Initialized
+2025-05-27 14:02:32 - telegram_ui_bot - INFO - Timestamp: 2025-05-27 14:02:32
+2025-05-27 14:02:32 - telegram_ui_bot - INFO - ==================================================
+2025-05-27 14:02:32 - telegram_ui_bot - INFO - Configuration loaded and validated successfully
+2025-05-27 14:02:37 - telegram_ui_bot - INFO - ==================================================
+2025-05-27 14:02:37 - telegram_ui_bot - INFO - Telegram UI Bot Logger Initialized
+2025-05-27 14:02:37 - telegram_ui_bot - INFO - Timestamp: 2025-05-27 14:02:37
+2025-05-27 14:02:37 - telegram_ui_bot - INFO - ==================================================
+2025-05-27 14:02:37 - telegram_ui_bot - INFO - Configuration loaded and validated successfully
+2025-05-27 14:05:47 - telegram_ui_bot - INFO - ==================================================
+2025-05-27 14:05:47 - telegram_ui_bot - INFO - Telegram UI Bot Logger Initialized
+2025-05-27 14:05:47 - telegram_ui_bot - INFO - Timestamp: 2025-05-27 14:05:47
+2025-05-27 14:05:47 - telegram_ui_bot - INFO - ==================================================
+2025-05-27 14:05:47 - telegram_ui_bot - INFO - Configuration loaded and validated successfully
+2025-05-27 14:07:38 - telegram_ui_bot - INFO - ==================================================
+2025-05-27 14:07:38 - telegram_ui_bot - INFO - Telegram UI Bot Logger Initialized
+2025-05-27 14:07:38 - telegram_ui_bot - INFO - Timestamp: 2025-05-27 14:07:38
+2025-05-27 14:07:38 - telegram_ui_bot - INFO - ==================================================
+2025-05-27 14:07:38 - telegram_ui_bot - INFO - Configuration loaded and validated successfully
+2025-05-27 14:07:43 - telegram_ui_bot - INFO - ==================================================
+2025-05-27 14:07:43 - telegram_ui_bot - INFO - Telegram UI Bot Logger Initialized
+2025-05-27 14:07:43 - telegram_ui_bot - INFO - Timestamp: 2025-05-27 14:07:43
+2025-05-27 14:07:43 - telegram_ui_bot - INFO - ==================================================
+2025-05-27 14:07:43 - telegram_ui_bot - INFO - Configuration loaded and validated successfully
+2025-05-27 17:40:12 - telegram_ui_bot - INFO - ==================================================
+2025-05-27 17:40:12 - telegram_ui_bot - INFO - Telegram UI Bot Logger Initialized
+2025-05-27 17:40:12 - telegram_ui_bot - INFO - Timestamp: 2025-05-27 17:40:12
+2025-05-27 17:40:12 - telegram_ui_bot - INFO - ==================================================
+2025-05-27 17:40:12 - telegram_ui_bot - INFO - Configuration loaded and validated successfully
+2025-05-27 17:40:46 - telegram_ui_bot - INFO - Bot stopped
+2025-05-27 17:41:38 - telegram_ui_bot - INFO - ==================================================
+2025-05-27 17:41:38 - telegram_ui_bot - INFO - Telegram UI Bot Logger Initialized
+2025-05-27 17:41:38 - telegram_ui_bot - INFO - Timestamp: 2025-05-27 17:41:38
+2025-05-27 17:41:38 - telegram_ui_bot - INFO - ==================================================
+2025-05-27 17:41:38 - telegram_ui_bot - INFO - Configuration loaded and validated successfully
+2025-05-27 17:42:18 - telegram_ui_bot - INFO - Bot stopped
+2025-05-27 17:46:38 - telegram_ui_bot - INFO - ==================================================
+2025-05-27 17:46:38 - telegram_ui_bot - INFO - Telegram UI Bot Logger Initialized
+2025-05-27 17:46:38 - telegram_ui_bot - INFO - Timestamp: 2025-05-27 17:46:38
+2025-05-27 17:46:38 - telegram_ui_bot - INFO - ==================================================
+2025-05-27 17:46:38 - telegram_ui_bot - INFO - Configuration loaded and validated successfully
+2025-05-27 17:47:19 - telegram_ui_bot - INFO - Bot stopped
+2025-05-27 17:49:32 - telegram_ui_bot - INFO - ==================================================
+2025-05-27 17:49:32 - telegram_ui_bot - INFO - Telegram UI Bot Logger Initialized
+2025-05-27 17:49:32 - telegram_ui_bot - INFO - Timestamp: 2025-05-27 17:49:32
+2025-05-27 17:49:32 - telegram_ui_bot - INFO - ==================================================
+2025-05-27 17:49:32 - telegram_ui_bot - INFO - Configuration loaded and validated successfully
+2025-05-27 17:50:38 - telegram_ui_bot - ERROR - Critical error in bot startup: Connection to Telegram failed 5 time(s)
+2025-05-27 17:50:38 - telegram_ui_bot - INFO - Bot stopped
+2025-05-27 17:51:45 - telegram_ui_bot - INFO - ==================================================
+2025-05-27 17:51:45 - telegram_ui_bot - INFO - Telegram UI Bot Logger Initialized
+2025-05-27 17:51:45 - telegram_ui_bot - INFO - Timestamp: 2025-05-27 17:51:45
+2025-05-27 17:51:45 - telegram_ui_bot - INFO - ==================================================
+2025-05-27 17:51:45 - telegram_ui_bot - INFO - Configuration loaded and validated successfully
+2025-05-27 17:52:51 - telegram_ui_bot - ERROR - Critical error in bot startup: Connection to Telegram failed 5 time(s)
+2025-05-27 17:52:51 - telegram_ui_bot - INFO - Bot stopped
+2025-05-27 17:54:52 - telegram_ui_bot - INFO - ==================================================
+2025-05-27 17:54:52 - telegram_ui_bot - INFO - Telegram UI Bot Logger Initialized
+2025-05-27 17:54:52 - telegram_ui_bot - INFO - Timestamp: 2025-05-27 17:54:52
+2025-05-27 17:54:52 - telegram_ui_bot - INFO - ==================================================
+2025-05-27 17:54:52 - telegram_ui_bot - INFO - Configuration loaded and validated successfully
+2025-05-27 17:55:12 - telegram_ui_bot - INFO - Bot stopped
+2025-05-27 17:55:25 - telegram_ui_bot - INFO - ==================================================
+2025-05-27 17:55:25 - telegram_ui_bot - INFO - Telegram UI Bot Logger Initialized
+2025-05-27 17:55:25 - telegram_ui_bot - INFO - Timestamp: 2025-05-27 17:55:25
+2025-05-27 17:55:25 - telegram_ui_bot - INFO - ==================================================
+2025-05-27 17:55:25 - telegram_ui_bot - INFO - Configuration loaded and validated successfully
+2025-05-27 17:56:31 - telegram_ui_bot - ERROR - Critical error in bot startup: Connection to Telegram failed 5 time(s)
+2025-05-27 17:56:31 - telegram_ui_bot - INFO - Bot stopped
+2025-05-27 18:00:00 - telegram_ui_bot - INFO - ==================================================
+2025-05-27 18:00:00 - telegram_ui_bot - INFO - Telegram UI Bot Logger Initialized
+2025-05-27 18:00:00 - telegram_ui_bot - INFO - Timestamp: 2025-05-27 18:00:00
+2025-05-27 18:00:00 - telegram_ui_bot - INFO - ==================================================
+2025-05-27 18:00:00 - telegram_ui_bot - INFO - Configuration loaded and validated successfully
+2025-05-27 18:01:06 - telegram_ui_bot - ERROR - Critical error in bot startup: Connection to Telegram failed 5 time(s)
+2025-05-27 18:01:06 - telegram_ui_bot - INFO - Bot stopped
