@@ -1,0 +1,10 @@
+This is a placeholder for the actual resume PDF file.
+The resume file should be placed in this directory with the exact filename specified in the RESUME_FILENAME environment variable.
+
+To add your resume:
+1. Save your resume as a PDF file
+2. Name it exactly as specified in RESUME_FILENAME (default: "javad-rostami resume.pdf")
+3. Place it in the resume/ directory
+4. The bot will automatically attach this file when responding to job postings
+
+Note: This is a text placeholder file. Replace it with your actual PDF resume.
