@@ -85,3 +85,9 @@
 2025-05-27 18:00:00 - telegram_ui_bot - INFO - Configuration loaded and validated successfully
 2025-05-27 18:01:06 - telegram_ui_bot - ERROR - Critical error in bot startup: Connection to Telegram failed 5 time(s)
 2025-05-27 18:01:06 - telegram_ui_bot - INFO - Bot stopped
+2025-05-27 19:40:45 - telegram_ui_bot - INFO - ==================================================
+2025-05-27 19:40:45 - telegram_ui_bot - INFO - Telegram UI Bot Logger Initialized
+2025-05-27 19:40:45 - telegram_ui_bot - INFO - Timestamp: 2025-05-27 19:40:45
+2025-05-27 19:40:45 - telegram_ui_bot - INFO - ==================================================
+2025-05-27 19:40:45 - telegram_ui_bot - INFO - Configuration loaded and validated successfully
+2025-05-27 19:41:04 - telegram_ui_bot - INFO - Bot stopped

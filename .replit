@@ -34,7 +34,7 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "pip install -r requirements.txt && python main.py"
+args = "python main.py"
 
 [deployment]
 run = ["sh", "-c", "python main.py"]

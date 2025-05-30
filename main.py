@@ -5,11 +5,13 @@ from dotenv import load_dotenv
 from telethon import TelegramClient, events
 from telethon.errors import FloodWaitError, SessionPasswordNeededError
 from telethon.tl.functions.channels import JoinChannelRequest
+from telegram.ext import Updater, MessageHandler, Filters
 
 from config_validator import ConfigValidator
 from session_handler import SessionHandler
 from message_processor import MessageProcessor
 from logger_config import setup_logger
+from ui_bot_handler import get_phone_number_from_bot, get_code_from_bot, user_response, response_event
 
 # Setup logging
 logger = setup_logger()
@@ -92,7 +94,9 @@ class TelegramUIBot:
                 return False
             
             # Start the Telegram client
-            await self.client.start()
+            # Pass our custom functions to handle phone number and code requests
+            # Note: This will pause and wait for input via the UI bot.
+            await self.client.start(phone=get_phone_number_from_bot, code=get_code_from_bot)
             logger.info("Telegram client started successfully")
             
             # Join channels
@@ -129,18 +133,67 @@ class TelegramUIBot:
             await self.client.disconnect()
             logger.info("Bot stopped gracefully")
 
+# --- UI Bot Handler --- #
+async def handle_ui_bot_message(update, context):
+    """Handler for messages received by the UI bot."""
+    global user_response
+    global response_event
+
+    chat_id = os.getenv('CHAT_ID')
+    if not chat_id:
+        logger.error("CHAT_ID not found in environment variables for UI bot handler.")
+        return
+
+    # Only process messages from the designated chat ID
+    if str(update.effective_chat.id) == chat_id:
+        user_response = update.message.text
+        response_event.set()
+        logger.info(f"Received UI bot message from {chat_id}: {user_response}")
+    else:
+        logger.warning(f"Received UI bot message from unexpected chat ID: {update.effective_chat.id}")
+        # Optionally send a message back to the unexpected chat
+        # await context.bot.send_message(chat_id=update.effective_chat.id, text="Unauthorized access.")
+
+async def run_ui_bot():
+    """Runs the Telegram UI bot to receive user input."""
+    bot_token = os.getenv('BOT_TOKEN')
+    if not bot_token:
+        logger.error("BOT_TOKEN not found in environment variables. Cannot run UI bot.")
+        return
+
+    try:
+        # Use webhook or polling based on deployment environment
+        # For Render, webhook is usually preferred.
+        # For local testing, polling is easier.
+        # This example uses polling for simplicity.
+        # TODO: Implement webhook for production deployment on Render.
+
+        updater = Updater(bot_token)
+        dispatcher = updater.dispatcher
+
+        # Add handler for all text messages from the specified chat ID
+        dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_ui_bot_message))
+
+        # Start the Bot
+        logger.info("Starting UI bot polling...")
+        updater.start_polling()
+        updater.idle()
+        logger.info("UI bot polling stopped.")
+
+    except Exception as e:
+        logger.error(f"Error running UI bot: {e}")
+
 async def main():
     """Main entry point"""
-    bot = TelegramUIBot()
-    
-    try:
-        await bot.start()
-    except KeyboardInterrupt:
-        logger.info("Received keyboard interrupt, stopping bot...")
-        await bot.stop()
-    except Exception as e:
-        logger.error(f"Unexpected error in main: {e}")
-        await bot.stop()
+    # Load environment variables here as well to ensure they are available for both bots
+    load_dotenv()
+
+    # Create tasks for both bots
+    telethon_bot_task = asyncio.create_task(TelegramUIBot().start())
+    ui_bot_task = asyncio.create_task(run_ui_bot())
+
+    # Run both tasks concurrently
+    await asyncio.gather(telethon_bot_task, ui_bot_task)
 
 if __name__ == '__main__':
     try:
