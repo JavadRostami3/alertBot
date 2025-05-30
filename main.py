@@ -74,9 +74,9 @@ class TelegramUIBot:
 
         self._auth_in_progress = True
         try:
-            # Attempt to start the client. This might trigger auth prompts.
-            await self.client.start()
-            logger.info("Initial client start successful (might be resumed session).")
+            # Connect the Telegram client without prompting for input
+            await self.client.connect()
+            logger.info("Telethon client connected.")
 
             if not await self.client.is_user_authorized():
                  logger.info("Client is not authorized. Starting interactive authentication.")
@@ -84,8 +84,8 @@ class TelegramUIBot:
                  # First, request the phone number if needed.
                  # Telethon's sign_in will likely raise an exception if phone is needed or code is needed.
                  try:
-                     # Try signing in. This will raise an error if phone/code/password is needed.
-                     await self.client.sign_in(password='dummy') # Use a dummy password to trigger SessionPasswordNeededError if 2FA is on
+                     # Attempt dummy sign_in to trigger auth exception flow
+                     await self.client.sign_in(password='dummy')
                  except (SessionPasswordNeededError, PhoneCodeEmptyError, PhoneCodeExpiredError, PasswordHashInvalidError) as e:
                       logger.info(f"Telethon requires authentication input: {type(e).__name__}")
 
@@ -310,32 +310,41 @@ async def run_ui_bot():
         # Register handler for all text messages from the specified chat ID
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_ui_bot_message))
 
+        # Initialize the application
+        await application.initialize()
         # Set the webhook
-        webhook_path = '/webhook' # Define the URL path for the webhook
+        webhook_path = '/webhook'
         webhook_url = render_external_url + webhook_path
-
         logger.info(f"Setting webhook to: {webhook_url} on port {port}")
 
         # Remove any existing webhook first (important for Render restarts)
         try:
-            await application.bot.delete_webhook()
-            await asyncio.sleep(1) # Give a moment for the delete to process
-            logger.info("Existing webhook deleted.")
+            await application.bot.delete_webhook(drop_pending_updates=True)
+            await asyncio.sleep(1)
+            logger.info("Existing webhook (if any) deleted.")
         except Exception as webhook_delete_error:
-            logger.warning(f"Could not delete existing webhook (may not exist): {webhook_delete_error}")
+            logger.warning(f"Could not delete existing webhook: {webhook_delete_error}")
 
-        # Set the new webhook
-        await application.bot.set_webhook(url=webhook_url)
-        logger.info(f"Webhook successfully set to {webhook_url}")
-
-        # Start the webhook server
-        # The webhook server runs in a separate task managed by the Application
-        # We need to run the Application until it is stopped.
-        logger.info(f"Starting UI bot webhook server on port {port}...")
-        # This should be the main async task for the UI bot
-        await application.run_webhook(listen="0.0.0.0", port=port, webhook_url=webhook_url, url_path=webhook_path)
-
-        logger.info("UI bot webhook server stopped.")
+        # Set the new webhook with drop_pending_updates for cleanliness
+        await application.bot.set_webhook(url=webhook_url, drop_pending_updates=True)
+        logger.info(f"Webhook set to {webhook_url}")
+        # Start the webhook listener
+        await application.updater.start_webhook(
+            listen="0.0.0.0",
+            port=port,
+            url_path=webhook_path
+        )
+        logger.info("UI bot webhook listener started.")
+        # Keep the webhook server running
+        try:
+            while True:
+                await asyncio.sleep(3600)
+        finally:
+            # On cancellation, stop webhook and shutdown application
+            await application.updater.stop_webhook()
+            await application.bot.delete_webhook()
+            await application.shutdown()
+            logger.info("UI bot webhook server shut down.")
 
     except Exception as e:
         logger.error(f"Error running UI bot with webhook: {e}")
