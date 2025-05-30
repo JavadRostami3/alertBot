@@ -3,8 +3,8 @@ import asyncio
 import logging
 from dotenv import load_dotenv
 from telethon import TelegramClient, events
-from telethon.errors import FloodWaitError, SessionPasswordNeededError
-from telethon.errors import rpcerrorlist
+from telethon.errors import FloodWaitError, SessionPasswordNeededError, rpcerrorlist
+from telethon.errors import PhoneCodeEmptyError, PhoneCodeExpiredError, PasswordHashInvalidError
 from telethon.tl.functions.channels import JoinChannelRequest
 from telegram.ext import Updater, MessageHandler, Filters
 from telegram import WebhookInfo
@@ -14,6 +14,7 @@ from session_handler import SessionHandler
 from message_processor import MessageProcessor
 from logger_config import setup_logger
 from ui_bot_handler import get_phone_number_from_bot, get_code_from_bot, user_response, response_event
+import signal
 
 # Setup logging
 logger = setup_logger()
@@ -26,6 +27,8 @@ class TelegramUIBot:
         self.message_processor = None
         self.channel_entities = []
         self.is_running = False
+        # Flag to manage auth process status
+        self._auth_in_progress = False
         
     async def initialize(self):
         """Initialize the bot with configuration and validation"""
@@ -35,13 +38,20 @@ class TelegramUIBot:
             validator = ConfigValidator()
             self.config = validator.validate_config()
             logger.info("Configuration loaded and validated successfully")
+
+            # Check for essential config for UI bot interaction
+            if not os.getenv('BOT_TOKEN') or not os.getenv('CHAT_ID'):
+                 logger.error("BOT_TOKEN or CHAT_ID not set in environment variables. UI bot interaction will not work.")
+                 # Decide how to proceed if UI bot is essential - maybe raise an error?
+                 # For now, log and continue, but auth may fail without UI bot.
+
             
             # Initialize session handler
             self.session_handler = SessionHandler(self.config)
             self.client = await self.session_handler.create_client()
 
-            # Setup Telethon event handlers for authentication prompts
-            await self.setup_auth_handlers()
+            # No need to setup RpcError handler globally if we catch specific exceptions
+            # self.setup_auth_handlers() # Removed this call
             
             # Initialize message processor
             self.message_processor = MessageProcessor(self.config)
@@ -52,43 +62,79 @@ class TelegramUIBot:
             logger.error(f"Failed to initialize bot: {e}")
             return False
 
-    async def setup_auth_handlers(self):
-        """Setup event handlers for Telethon authentication prompts."""
-        @self.client.on(events.RpcError)
-        async def handle_auth_errors(event):
-            # Use a flag to ensure we only handle one auth request at a time
-            if hasattr(self, '_auth_in_progress') and self._auth_in_progress:
-                return
+    # Removed the setup_auth_handlers method as we'll use try/except in start()
+    # async def setup_auth_handlers(self):
+    #     ...
 
-            self._auth_in_progress = True
-            try:
-                if isinstance(event.original_event, rpcerrorlist.PhoneCodeEmptyError) or \
-                   isinstance(event.original_event, rpcerrorlist.PhoneCodeExpiredError):
-                    logger.warning("Telethon requested phone code.")
-                    code = await get_code_from_bot()
-                    await self.client.send_code_request(self.client.disconnected_phone, code)
+    async def authenticate(self):
+        """Handles the Telethon authentication flow interactively via UI bot."""
+        if self._auth_in_progress:
+            logger.warning("Authentication process already in progress.")
+            return
 
-                elif isinstance(event.original_event, rpcerrorlist.SessionPasswordNeededError):
-                     logger.warning("Telethon requested 2FA password.")
-                     # Assuming get_password_from_bot exists in ui_bot_handler.py if needed
-                     # password = await get_password_from_bot()
-                     # await self.client.sign_in(password=password)
-                     logger.error("2FA password is required. Please disable it or implement get_password_from_bot.")
-                     # You might want to stop the bot here or handle differently
+        self._auth_in_progress = True
+        try:
+            # Attempt to start the client. This might trigger auth prompts.
+            await self.client.start()
+            logger.info("Initial client start successful (might be resumed session).")
 
-                # Add handlers for other potential auth errors if necessary
+            if not await self.client.is_user_authorized():
+                 logger.info("Client is not authorized. Starting interactive authentication.")
+                 # Initiate the authentication flow.
+                 # First, request the phone number if needed.
+                 # Telethon's sign_in will likely raise an exception if phone is needed or code is needed.
+                 try:
+                     # Try signing in. This will raise an error if phone/code/password is needed.
+                     await self.client.sign_in(password='dummy') # Use a dummy password to trigger SessionPasswordNeededError if 2FA is on
+                 except (SessionPasswordNeededError, PhoneCodeEmptyError, PhoneCodeExpiredError, PasswordHashInvalidError) as e:
+                      logger.info(f"Telethon requires authentication input: {type(e).__name__}")
 
-            except Exception as e:
-                logger.error(f"Error during auth handler: {e}")
-            finally:
-                self._auth_in_progress = False
+                      # Handle phone code request
+                      if isinstance(e, (PhoneCodeEmptyError, PhoneCodeExpiredError)):
+                           logger.info("Requesting phone code via UI bot...")
+                           # We need the phone number first if not already available in the session
+                           # The telethon client object should have the disconnected_phone if start was called without auth
+                           phone_number = await get_phone_number_from_bot()
+                           await self.client.send_code_request(phone_number)
+                           logger.info("Phone code request sent. Requesting code via UI bot...")
+                           code = await get_code_from_bot()
+                           # Now sign in with phone and code
+                           await self.client.sign_in(phone_number, code)
+                           logger.info("Signed in with phone and code.")
 
-        # Although start() doesn't directly use these args anymore,
-        # telethon might internally trigger RpcError events that we now handle.
-        # We might still need a way to *initiate* the phone number request.
-        # The first sign_in call in client.start() should ideally trigger PhoneCodeEmptyError
-        # if not already logged in.
-        logger.info("Telethon authentication event handlers setup.")
+                      # Handle 2FA password request
+                      elif isinstance(e, SessionPasswordNeededError):
+                           logger.warning("Two-factor authentication is enabled.")
+                           # You need to implement get_password_from_bot in ui_bot_handler.py
+                           # password = await get_password_from_bot()
+                           # await self.client.sign_in(password=password)
+                           logger.error("2FA password required. Please disable it or implement password handler.")
+                           # Depending on your requirements, you might want to exit here
+                           # raise e # Re-raise to stop the bot if 2FA is unhandled
+
+                      elif isinstance(e, PasswordHashInvalidError):
+                          logger.error("Invalid password provided for 2FA.")
+                          # Handle invalid password (e.g., ask again)
+
+                 if await self.client.is_user_authorized():
+                     logger.info("User authorized successfully after interactive flow.")
+                 else:
+                     logger.error("Authentication failed after interactive flow.")
+                     # Depending on your requirements, you might want to stop the bot here
+                     return False # Indicate auth failure
+
+            # Check authorization status after all attempts
+            if not await self.client.is_user_authorized():
+                 logger.error("Telethon client failed to authorize user.")
+                 return False # Indicate failure
+
+            return True # Indicate success
+
+        except Exception as e:
+            logger.error(f"Error during authentication process: {e}")
+            return False
+        finally:
+            self._auth_in_progress = False
 
     async def join_channels(self):
         """Join all configured channels and return their entities"""
@@ -117,6 +163,11 @@ class TelegramUIBot:
     
     async def setup_message_handler(self):
         """Setup the message event handler"""
+        # Check if there are channels to monitor before setting up handler
+        if not self.channel_entities:
+            logger.warning("No valid channels to monitor. Skipping message handler setup.")
+            return
+
         @self.client.on(events.NewMessage(chats=self.channel_entities))
         async def message_handler(event):
             try:
@@ -136,18 +187,21 @@ class TelegramUIBot:
                 logger.error("Bot initialization failed")
                 return False
             
-            # Start the Telegram client
-            # Telethon will now use the event handlers for auth prompts
-            await self.client.start()
-            logger.info("Telegram client started successfully")
+            # Handle authentication interactively
+            if not await self.authenticate():
+                 logger.error("Authentication failed. Stopping bot.")
+                 return False # Stop if authentication fails
+
+            # Log authorization status after authentication attempt
+            if await self.client.is_user_authorized():
+                 logger.info("Telethon client is authorized.")
+            else:
+                 logger.warning("Telethon client is NOT authorized after authentication process.")
+
             
             # Join channels
             self.channel_entities = await self.join_channels()
-            if not self.channel_entities:
-                logger.warning("No channels were successfully joined")
-                # Depending on requirements, you might want to stop here
-                # if channel joining is essential.
-                # For now, letting it run to potentially process old messages.
+            # The check for empty channels is now in setup_message_handler
 
             # Setup message handler for incoming messages in joined channels
             await self.setup_message_handler()
@@ -159,24 +213,31 @@ class TelegramUIBot:
             await self.client.run_until_disconnected()
             
         except SessionPasswordNeededError:
-            # This exception might still be raised if the event handler fails or 2FA is not handled
-            logger.error("Two-factor authentication is enabled and not handled by UI bot. Please disable it or provide password handler.")
+            # This catch is a fallback, ideally the authenticate method handles it
+            logger.error("SessionPasswordNeededError escaped authentication handler. 2FA likely not handled.")
             return False
         except Exception as e:
             logger.error(f"Critical error in Telegram client startup: {e}")
             return False
         finally:
             self.is_running = False
-            if self.client:
-                await self.client.disconnect()
-            logger.info("Telethon client stopped")
+            if self.client and self.client.is_connected(): # Check if client exists and is connected before disconnecting
+                 await self.client.disconnect()
+                 logger.info("Telethon client disconnected.")
+            # Remove signal handlers upon exit
+            signal.signal(signal.SIGINT, signal.SIG_DFL)
+            signal.signal(signal.SIGTERM, signal.SIG_DFL)
+
     
     async def stop(self):
         """Gracefully stop the bot"""
-        if self.is_running and self.client:
+        if self.is_running and self.client and self.client.is_connected():
             self.is_running = False
             await self.client.disconnect()
-            logger.info("Bot stopped gracefully")
+            logger.info("Telethon client stopped gracefully")
+            # Note: UI bot (webhook) shutdown needs separate handling if not managed by updater.idle()
+            # For webhook, stopping the underlying http server would be needed.
+            # In this setup, the async sleep loop will just finish on task cancellation.
 
 # --- UI Bot Handler (Webhook) --- #
 async def handle_ui_bot_message(update, context):
@@ -189,7 +250,10 @@ async def handle_ui_bot_message(update, context):
         logger.error("CHAT_ID not found in environment variables for UI bot handler.")
         # Send a message back to the user indicating configuration error
         if update.effective_chat:
-             await context.bot.send_message(chat_id=update.effective_chat.id, text="Bot configuration error: CHAT_ID not set.")
+             try:
+                 await context.bot.send_message(chat_id=update.effective_chat.id, text="Bot configuration error: CHAT_ID not set.")
+             except Exception as send_e:
+                 logger.error(f"Error sending config error message: {send_e}")
         return
 
     # Only process messages from the designated chat ID
@@ -198,7 +262,10 @@ async def handle_ui_bot_message(update, context):
         response_event.set()
         logger.info(f"Received UI bot message from {chat_id}: {user_response}")
         # Optionally send a confirmation back to the user
-        # await context.bot.send_message(chat_id=chat_id, text="Received your input.")
+        # try:
+        #     await context.bot.send_message(chat_id=chat_id, text="Received your input.")
+        # except Exception as send_e:
+        #      logger.error(f"Error sending confirmation message: {send_e}")
 
     else:
         logger.warning(f"Received UI bot message from unexpected chat ID: {update.effective_chat.id}")
@@ -214,61 +281,71 @@ async def run_ui_bot():
     bot_token = os.getenv('BOT_TOKEN')
     if not bot_token:
         logger.error("BOT_TOKEN not found in environment variables. Cannot run UI bot.")
-        return
+        return # Exit if no bot token
 
     render_external_url = os.getenv('RENDER_EXTERNAL_URL')
-    port = int(os.getenv('PORT', 8080)) # Default to 8080 if PORT not set
+    # Safely get port, default to None if not set or invalid, for webhook config
+    try:
+        port = int(os.getenv('PORT'))
+    except (ValueError, TypeError):
+        logger.error("PORT environment variable is not set or is invalid.")
+        # Depending on environment, you might need a default port or raise error
+        # For Render web services, PORT is mandatory and should be injected.
+        # If it's missing, webhook setup will fail.
+        return # Exit if port is not set or invalid
+
 
     if not render_external_url:
         logger.error("RENDER_EXTERNAL_URL not found in environment variables. Cannot set up webhook.")
-        # Fallback to polling for local development if URL is missing (optional)
         # In a production environment like Render, this should ideally not happen.
-        try:
-            logger.info("RENDER_EXTERNAL_URL not set, falling back to polling (for local development).")
-            updater = Updater(bot_token)
-            dispatcher = updater.dispatcher
-            dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_ui_bot_message))
-            logger.info("Starting UI bot polling...")
-            updater.start_polling()
-            updater.idle()
-            logger.info("UI bot polling stopped.")
-        except Exception as e:
-             logger.error(f"Error during fallback polling: {e}")
-        return
+        # Without a public URL, webhook cannot be set.
+        # No fallback to polling here, as polling caused issues.
+        return # Exit if URL is missing
 
     try:
-        updater = Updater(bot_token)
-        dispatcher = updater.dispatcher
+        # Create the Application and pass it your bot token
+        # Using ApplicationBuilder for modern python-telegram-bot async features
+        from telegram.ext import ApplicationBuilder
+        application = ApplicationBuilder().token(bot_token).build()
+
+        # Get dispatcher to register handlers
+        dispatcher = application.dispatcher
 
         # Add handler for all text messages from the specified chat ID
         dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_ui_bot_message))
 
         # Set the webhook
-        webhook_url = render_external_url + '/webhook' # Assuming /webhook endpoint
+        webhook_path = '/webhook' # Define the URL path for the webhook
+        webhook_url = render_external_url + webhook_path
+
         logger.info(f"Setting webhook to: {webhook_url} on port {port}")
 
         # Remove any existing webhook first (important for Render restarts)
-        await updater.bot.delete_webhook()
-        await asyncio.sleep(1) # Give a moment for the delete to process
+        try:
+            await application.bot.delete_webhook()
+            await asyncio.sleep(1) # Give a moment for the delete to process
+            logger.info("Existing webhook deleted.")
+        except Exception as webhook_delete_error:
+            logger.warning(f"Could not delete existing webhook (may not exist): {webhook_delete_error}")
 
-        updater.start_webhook(
-            listen="0.0.0.0",
-            port=port,
-            url_path='webhook',
-            webhook_url=webhook_url
-        )
+        # Set the new webhook
+        await application.bot.set_webhook(url=webhook_url)
+        logger.info(f"Webhook successfully set to {webhook_url}")
 
-        logger.info("UI bot webhook started.")
-        # Keep the updater running (replace updater.idle())
-        # updater.idle() is synchronous and blocks. We need an async way.
-        # The webhook server runs in the background; the task just needs to stay alive.
-        while True:
-            await asyncio.sleep(3600) # Sleep for a long time to keep the task alive
+        # Start the webhook server
+        # The webhook server runs in a separate task managed by the Application
+        # We need to run the Application until it is stopped.
+        logger.info(f"Starting UI bot webhook server on port {port}...")
+        # This should be the main async task for the UI bot
+        await application.run_webhook(listen="0.0.0.0", port=port, webhook_url=webhook_url, url_path=webhook_path)
 
-        logger.info("UI bot webhook stopped.")
+        logger.info("UI bot webhook server stopped.")
 
     except Exception as e:
         logger.error(f"Error running UI bot with webhook: {e}")
+        # Re-raise the exception to potentially stop the main program
+        raise e
+
 
 async def main():
     """Main entry point"""
@@ -278,38 +355,67 @@ async def main():
     # Get the event loop
     loop = asyncio.get_event_loop()
 
-    # Create tasks for both bots
-    # Run the Telethon bot in a task
+    # Create and run the Telethon bot in a task
+    # Authentication is handled within the bot's start method
     telethon_bot = TelegramUIBot()
     telethon_bot_task = loop.create_task(telethon_bot.start())
 
-    # Run the UI bot webhook in a task
-    ui_bot_task = loop.create_task(run_ui_bot())
-
-    # Wait for both tasks to complete (they are expected to run indefinitely)
+    # Create and run the UI bot webhook server in a task
+    # Use a try-except to catch exceptions from run_ui_bot and potentially stop telethon_bot
+    ui_bot_task = None
     try:
+        ui_bot_task = loop.create_task(run_ui_bot())
+
+        # Wait for both tasks to complete (they are expected to run indefinitely)
         await asyncio.gather(telethon_bot_task, ui_bot_task)
+
     except KeyboardInterrupt:
         logger.info("Received keyboard interrupt, stopping bots...")
-        # Cancel tasks gracefully
-        telethon_bot_task.cancel()
-        ui_bot_task.cancel()
-        try:
-            await asyncio.gather(telethon_bot_task, ui_bot_task, return_exceptions=True)
-        except Exception as e:
-            logger.error(f"Error during graceful shutdown: {e}")
-
     except Exception as e:
-        logger.error(f"Unexpected error in main gathering tasks: {e}")
-
+        logger.error(f"Unexpected error in main gathering tasks: {e}. Attempting graceful shutdown.")
+        # Propagate the error or handle it gracefully
+        # The exception from run_ui_bot will stop that task.
+        # We should ensure telethon_bot is also stopped.
+        
     finally:
-        # Ensure Telethon client disconnects on exit
-        if telethon_bot.client and telethon_bot.client.is_connected():
-             await telethon_bot.client.disconnect()
-             logger.info("Telethon client disconnected during final cleanup.")
+         # Cancel tasks gracefully on exit or error
+         if telethon_bot_task and not telethon_bot_task.done():
+             telethon_bot_task.cancel()
+             logger.info("Telethon bot task cancelled.")
+         if ui_bot_task and not ui_bot_task.done():
+             ui_bot_task.cancel()
+             logger.info("UI bot task cancelled.")
+
+         # Wait for cancellation to complete
+         # Use return_exceptions=True to prevent exceptions during cancellation from stopping gather
+         try:
+              await asyncio.gather(telethon_bot_task, ui_bot_task, return_exceptions=True)
+              logger.info("Tasks gathered after cancellation.")
+         except Exception as gather_e:
+              logger.error(f"Error during final gather after cancellation: {gather_e}")
+
+         # The finally block in TelegramUIBot.start() will handle client disconnect
+         # and signal handler cleanup.
+
+
+def shutdown_handler(signal_received, frame):
+    logger.info(f'Signal {signal_received} received. Initiating graceful shutdown.')
+    # Get the current event loop and stop it gracefully
+    loop = asyncio.get_event_loop()
+    # You might need a way to access the bot instance(s) here to call stop()
+    # For simplicity now, we rely on the main loop cancellation and finally blocks
+    # Or better, find the running tasks and cancel them:
+    for task in asyncio.all_tasks(loop=loop):
+        if task is not asyncio.current_task(loop=loop): # Don't cancel self
+             task.cancel()
+             logger.info(f"Cancelled task: {task.get_name() if hasattr(task, 'get_name') else task}")
 
 
 if __name__ == '__main__':
+    # Setup signal handlers
+    signal.signal(signal.SIGINT, shutdown_handler)
+    signal.signal(signal.SIGTERM, shutdown_handler)
+
     try:
         # Get the current event loop or create a new one if none exists
         loop = asyncio.get_event_loop()
@@ -317,11 +423,16 @@ if __name__ == '__main__':
              logger.warning("Event loop is already running.")
              # If running in an environment like Jupyter, use run_until_complete
              # loop.run_until_complete(main())
+             logger.error("Running in an unexpected async environment.")
+             # Depending on context, you might need to raise an error or adapt.
+             # For typical script execution, this block indicates an issue.
         else:
              # Otherwise, run the main coroutine
+             logger.info("Starting main asyncio loop.")
              loop.run_until_complete(main())
 
     except KeyboardInterrupt:
-        print("\nBot stopped by user")
+        print("\nBot stopped by user (KeyboardInterrupt)")
     except Exception as e:
         print(f"Fatal error in __main__: {e}")
+        logger.error(f"Fatal error in __main__ block: {e}")
