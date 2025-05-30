@@ -68,68 +68,33 @@ class TelegramUIBot:
 
     async def authenticate(self):
         """Handles the Telethon authentication flow interactively via UI bot."""
-        if self._auth_in_progress:
-            logger.warning("Authentication process already in progress.")
-            return
-
         self._auth_in_progress = True
         try:
-            # Connect the Telegram client without prompting for input
+            # Connect the Telegram client using existing session or raw connection
             await self.client.connect()
             logger.info("Telethon client connected.")
 
+            # If not authorized, start interactive phone+code login
             if not await self.client.is_user_authorized():
-                 logger.info("Client is not authorized. Starting interactive authentication.")
-                 # Initiate the authentication flow.
-                 # First, request the phone number if needed.
-                 # Telethon's sign_in will likely raise an exception if phone is needed or code is needed.
-                 try:
-                     # Attempt dummy sign_in to trigger auth exception flow
-                     await self.client.sign_in(password='dummy')
-                 except (SessionPasswordNeededError, PhoneCodeEmptyError, PhoneCodeExpiredError, PasswordHashInvalidError) as e:
-                      logger.info(f"Telethon requires authentication input: {type(e).__name__}")
+                logger.info("Client is not authorized. Starting interactive authentication.")
+                phone_number = await get_phone_number_from_bot()
+                await self.client.send_code_request(phone_number)
+                logger.info("Phone code request sent. Waiting for code via UI bot...")
+                code = await get_code_from_bot()
+                # Sign in with the received code
+                await self.client.sign_in(phone=phone_number, code=code)
+                logger.info("Signed in with phone and code.")
 
-                      # Handle phone code request
-                      if isinstance(e, (PhoneCodeEmptyError, PhoneCodeExpiredError)):
-                           logger.info("Requesting phone code via UI bot...")
-                           # We need the phone number first if not already available in the session
-                           # The telethon client object should have the disconnected_phone if start was called without auth
-                           phone_number = await get_phone_number_from_bot()
-                           await self.client.send_code_request(phone_number)
-                           logger.info("Phone code request sent. Requesting code via UI bot...")
-                           code = await get_code_from_bot()
-                           # Now sign in with phone and code
-                           await self.client.sign_in(phone_number, code)
-                           logger.info("Signed in with phone and code.")
-
-                      # Handle 2FA password request
-                      elif isinstance(e, SessionPasswordNeededError):
-                           logger.warning("Two-factor authentication is enabled.")
-                           # You need to implement get_password_from_bot in ui_bot_handler.py
-                           # password = await get_password_from_bot()
-                           # await self.client.sign_in(password=password)
-                           logger.error("2FA password required. Please disable it or implement password handler.")
-                           # Depending on your requirements, you might want to exit here
-                           # raise e # Re-raise to stop the bot if 2FA is unhandled
-
-                      elif isinstance(e, PasswordHashInvalidError):
-                          logger.error("Invalid password provided for 2FA.")
-                          # Handle invalid password (e.g., ask again)
-
-                 if await self.client.is_user_authorized():
-                     logger.info("User authorized successfully after interactive flow.")
-                 else:
-                     logger.error("Authentication failed after interactive flow.")
-                     # Depending on your requirements, you might want to stop the bot here
-                     return False # Indicate auth failure
-
-            # Check authorization status after all attempts
-            if not await self.client.is_user_authorized():
-                 logger.error("Telethon client failed to authorize user.")
-                 return False # Indicate failure
-
-            return True # Indicate success
-
+            # Final authorization check
+            if await self.client.is_user_authorized():
+                logger.info("User successfully authorized.")
+                return True
+            else:
+                logger.error("Authentication failed. Client still not authorized.")
+                return False
+        except SessionPasswordNeededError:
+            logger.error("Two-factor authentication is enabled but not implemented in UI bot. Please disable 2FA or implement password flow.")
+            return False
         except Exception as e:
             logger.error(f"Error during authentication process: {e}")
             return False
@@ -186,18 +151,10 @@ class TelegramUIBot:
             if not await self.initialize():
                 logger.error("Bot initialization failed")
                 return False
-            
-            # Handle authentication interactively
-            if not await self.authenticate():
-                 logger.error("Authentication failed. Stopping bot.")
-                 return False # Stop if authentication fails
 
-            # Log authorization status after authentication attempt
-            if await self.client.is_user_authorized():
-                 logger.info("Telethon client is authorized.")
-            else:
-                 logger.warning("Telethon client is NOT authorized after authentication process.")
-
+            # Start and authorize the Telegram client using UI bot for phone & code
+            await self.client.start(phone=get_phone_number_from_bot, code_callback=get_code_from_bot)
+            logger.info("Telegram client started and authorized successfully")
             
             # Join channels
             self.channel_entities = await self.join_channels()
@@ -213,15 +170,14 @@ class TelegramUIBot:
             await self.client.run_until_disconnected()
             
         except SessionPasswordNeededError:
-            # This catch is a fallback, ideally the authenticate method handles it
-            logger.error("SessionPasswordNeededError escaped authentication handler. 2FA likely not handled.")
+            logger.error("Two-factor authentication is enabled. Please disable it or implement get_password_from_bot.")
             return False
         except Exception as e:
             logger.error(f"Critical error in Telegram client startup: {e}")
             return False
         finally:
             self.is_running = False
-            if self.client and self.client.is_connected(): # Check if client exists and is connected before disconnecting
+            if self.client and self.client.is_connected():
                  await self.client.disconnect()
                  logger.info("Telethon client disconnected.")
             # Remove signal handlers upon exit
