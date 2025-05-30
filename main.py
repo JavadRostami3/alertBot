@@ -6,14 +6,14 @@ from telethon import TelegramClient, events
 from telethon.errors import FloodWaitError, SessionPasswordNeededError, rpcerrorlist
 from telethon.errors import PhoneCodeEmptyError, PhoneCodeExpiredError, PasswordHashInvalidError
 from telethon.tl.functions.channels import JoinChannelRequest
-from telegram.ext import MessageHandler, filters, ApplicationBuilder
-from telegram import WebhookInfo
+from flask_app import run_flask_app
+from telegram import Bot as TgBot
 
 from config_validator import ConfigValidator
 from session_handler import SessionHandler
 from message_processor import MessageProcessor
 from logger_config import setup_logger
-from ui_bot_handler import get_phone_number_from_bot, get_code_from_bot, user_response, response_event
+from ui_bot_handler import get_phone_number_from_bot, get_code_from_bot
 import signal
 
 # Setup logging
@@ -195,168 +195,36 @@ class TelegramUIBot:
             # For webhook, stopping the underlying http server would be needed.
             # In this setup, the async sleep loop will just finish on task cancellation.
 
-# --- UI Bot Handler (Webhook) --- #
-async def handle_ui_bot_message(update, context):
-    """Handler for messages received by the UI bot."""
-    global user_response
-    global response_event
-
-    chat_id = os.getenv('CHAT_ID')
-    if not chat_id:
-        logger.error("CHAT_ID not found in environment variables for UI bot handler.")
-        # Send a message back to the user indicating configuration error
-        if update.effective_chat:
-             try:
-                 await context.bot.send_message(chat_id=update.effective_chat.id, text="Bot configuration error: CHAT_ID not set.")
-             except Exception as send_e:
-                 logger.error(f"Error sending config error message: {send_e}")
-        return
-
-    # Only process messages from the designated chat ID
-    if str(update.effective_chat.id) == chat_id:
-        user_response = update.message.text
-        response_event.set()
-        logger.info(f"Received UI bot message from {chat_id}: {user_response}")
-        # Optionally send a confirmation back to the user
-        # try:
-        #     await context.bot.send_message(chat_id=chat_id, text="Received your input.")
-        # except Exception as send_e:
-        #      logger.error(f"Error sending confirmation message: {send_e}")
-
-    else:
-        logger.warning(f"Received UI bot message from unexpected chat ID: {update.effective_chat.id}")
-        # Send a message back to the unexpected chat
-        try:
-            await context.bot.send_message(chat_id=update.effective_chat.id, text="Unauthorized access.")
-        except Exception as e:
-             logger.error(f"Error sending unauthorized access message: {e}")
-
-
-async def run_ui_bot():
-    """Runs the Telegram UI bot using Webhook for Render deployment."""
-    bot_token = os.getenv('BOT_TOKEN')
-    if not bot_token:
-        logger.error("BOT_TOKEN not found in environment variables. Cannot run UI bot.")
-        return # Exit if no bot token
-
-    render_external_url = os.getenv('RENDER_EXTERNAL_URL')
-    # Safely get port, default to None if not set or invalid, for webhook config
-    try:
-        port = int(os.getenv('PORT'))
-    except (ValueError, TypeError):
-        logger.error("PORT environment variable is not set or is invalid.")
-        # Depending on environment, you might need a default port or raise error
-        # For Render web services, PORT is mandatory and should be injected.
-        # If it's missing, webhook setup will fail.
-        return # Exit if port is not set or invalid
-
-
-    if not render_external_url:
-        logger.error("RENDER_EXTERNAL_URL not found in environment variables. Cannot set up webhook.")
-        # In a production environment like Render, this should ideally not happen.
-        # Without a public URL, webhook cannot be set.
-        # No fallback to polling here, as polling caused issues.
-        return # Exit if URL is missing
-
-    try:
-        # Create the Application and pass it your bot token
-        # Using ApplicationBuilder for modern python-telegram-bot async features
-        application = ApplicationBuilder().token(bot_token).build()
-
-        # Register handler for all text messages from the specified chat ID
-        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_ui_bot_message))
-
-        # Initialize the application
-        await application.initialize()
-        # Set the webhook
-        webhook_path = '/webhook'
-        webhook_url = render_external_url + webhook_path
-        logger.info(f"Setting webhook to: {webhook_url} on port {port}")
-
-        # Remove any existing webhook first (important for Render restarts)
-        try:
-            await application.bot.delete_webhook(drop_pending_updates=True)
-            await asyncio.sleep(1)
-            logger.info("Existing webhook (if any) deleted.")
-        except Exception as webhook_delete_error:
-            logger.warning(f"Could not delete existing webhook: {webhook_delete_error}")
-
-        # Set the new webhook with drop_pending_updates for cleanliness
-        await application.bot.set_webhook(url=webhook_url, drop_pending_updates=True)
-        logger.info(f"Webhook set to {webhook_url}")
-        # Start the webhook listener
-        await application.updater.start_webhook(
-            listen="0.0.0.0",
-            port=port,
-            url_path=webhook_path
-        )
-        logger.info("UI bot webhook listener started.")
-        # Keep the webhook server running
-        try:
-            while True:
-                await asyncio.sleep(3600)
-        finally:
-            # On cancellation, stop webhook and shutdown application
-            await application.updater.stop_webhook()
-            await application.bot.delete_webhook()
-            await application.shutdown()
-            logger.info("UI bot webhook server shut down.")
-
-    except Exception as e:
-        logger.error(f"Error running UI bot with webhook: {e}")
-        # Re-raise the exception to potentially stop the main program
-        raise e
-
-
 async def main():
     """Main entry point"""
-    # Load environment variables here as well to ensure they are available for both bots
+    # Load environment variables
     load_dotenv()
 
     # Get the event loop
     loop = asyncio.get_event_loop()
 
-    # Create and run the Telethon bot in a task
-    # Authentication is handled within the bot's start method
+    # Setup Telegram bot webhook manually
+    bot_token = os.getenv("BOT_TOKEN")
+    render_url = os.getenv("RENDER_EXTERNAL_URL")
+    port = int(os.getenv("PORT"))
+    bot = TgBot(bot_token)
+    await bot.delete_webhook(drop_pending_updates=True)
+    await bot.set_webhook(url=render_url + "/webhook")
+
+    # Run Flask server in executor to handle webhook callbacks
+    flask_task = loop.run_in_executor(
+        None,
+        run_flask_app,
+        "0.0.0.0",
+        port
+    )
+
+    # Run Telethon bot
     telethon_bot = TelegramUIBot()
-    telethon_bot_task = loop.create_task(telethon_bot.start())
+    telethon_task = loop.create_task(telethon_bot.start())
 
-    # Create and run the UI bot webhook server in a task
-    # Use a try-except to catch exceptions from run_ui_bot and potentially stop telethon_bot
-    ui_bot_task = None
-    try:
-        ui_bot_task = loop.create_task(run_ui_bot())
-
-        # Wait for both tasks to complete (they are expected to run indefinitely)
-        await asyncio.gather(telethon_bot_task, ui_bot_task)
-
-    except KeyboardInterrupt:
-        logger.info("Received keyboard interrupt, stopping bots...")
-    except Exception as e:
-        logger.error(f"Unexpected error in main gathering tasks: {e}. Attempting graceful shutdown.")
-        # Propagate the error or handle it gracefully
-        # The exception from run_ui_bot will stop that task.
-        # We should ensure telethon_bot is also stopped.
-        
-    finally:
-         # Cancel tasks gracefully on exit or error
-         if telethon_bot_task and not telethon_bot_task.done():
-             telethon_bot_task.cancel()
-             logger.info("Telethon bot task cancelled.")
-         if ui_bot_task and not ui_bot_task.done():
-             ui_bot_task.cancel()
-             logger.info("UI bot task cancelled.")
-
-         # Wait for cancellation to complete
-         # Use return_exceptions=True to prevent exceptions during cancellation from stopping gather
-         try:
-              await asyncio.gather(telethon_bot_task, ui_bot_task, return_exceptions=True)
-              logger.info("Tasks gathered after cancellation.")
-         except Exception as gather_e:
-              logger.error(f"Error during final gather after cancellation: {gather_e}")
-
-         # The finally block in TelegramUIBot.start() will handle client disconnect
-         # and signal handler cleanup.
+    # Wait for both Flask and Telethon to run indefinitely
+    await asyncio.gather(telethon_task, flask_task)
 
 
 def shutdown_handler(signal_received, frame):
