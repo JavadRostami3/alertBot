@@ -4,7 +4,7 @@ import logging
 from dotenv import load_dotenv
 from telethon import TelegramClient, events
 from telethon.errors import FloodWaitError, SessionPasswordNeededError
-from telethon.errors import rpcerrorlist, RpcError
+from telethon.errors import rpcerrorlist
 from telethon.tl.functions.channels import JoinChannelRequest
 from telegram.ext import Updater, MessageHandler, Filters
 from telegram import WebhookInfo
