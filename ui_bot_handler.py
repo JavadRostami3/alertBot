@@ -1,7 +1,6 @@
 import os
 import logging
 from telegram import Bot
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
 import asyncio
 
 logger = logging.getLogger(__name__)
