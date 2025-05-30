@@ -6,8 +6,7 @@ from telethon import TelegramClient, events
 from telethon.errors import FloodWaitError, SessionPasswordNeededError, rpcerrorlist
 from telethon.errors import PhoneCodeEmptyError, PhoneCodeExpiredError, PasswordHashInvalidError
 from telethon.tl.functions.channels import JoinChannelRequest
-from telegram.ext import Updater, MessageHandler
-from telegram.ext import filters
+from telegram.ext import MessageHandler, filters, ApplicationBuilder
 from telegram import WebhookInfo
 
 from config_validator import ConfigValidator
@@ -306,14 +305,10 @@ async def run_ui_bot():
     try:
         # Create the Application and pass it your bot token
         # Using ApplicationBuilder for modern python-telegram-bot async features
-        from telegram.ext import ApplicationBuilder
         application = ApplicationBuilder().token(bot_token).build()
 
-        # Get dispatcher to register handlers
-        dispatcher = application.dispatcher
-
-        # Add handler for all text messages from the specified chat ID
-        dispatcher.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_ui_bot_message))
+        # Register handler for all text messages from the specified chat ID
+        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_ui_bot_message))
 
         # Set the webhook
         webhook_path = '/webhook' # Define the URL path for the webhook
