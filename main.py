@@ -6,7 +6,8 @@ from telethon import TelegramClient, events
 from telethon.errors import FloodWaitError, SessionPasswordNeededError, rpcerrorlist
 from telethon.errors import PhoneCodeEmptyError, PhoneCodeExpiredError, PasswordHashInvalidError
 from telethon.tl.functions.channels import JoinChannelRequest
-from telegram.ext import Updater, MessageHandler, Filters
+from telegram.ext import Updater, MessageHandler
+from telegram.ext import filters
 from telegram import WebhookInfo
 
 from config_validator import ConfigValidator
@@ -312,7 +313,7 @@ async def run_ui_bot():
         dispatcher = application.dispatcher
 
         # Add handler for all text messages from the specified chat ID
-        dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_ui_bot_message))
+        dispatcher.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_ui_bot_message))
 
         # Set the webhook
         webhook_path = '/webhook' # Define the URL path for the webhook
