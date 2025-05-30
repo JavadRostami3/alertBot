@@ -4,7 +4,7 @@ import logging
 from dotenv import load_dotenv
 from telethon import TelegramClient, events
 from telethon.errors import FloodWaitError, SessionPasswordNeededError
-from telethon.errors import rpcerrorlist
+from telethon.errors import rpcerrorlist, RpcError
 from telethon.tl.functions.channels import JoinChannelRequest
 from telegram.ext import Updater, MessageHandler, Filters
 from telegram import WebhookInfo
@@ -249,7 +249,7 @@ async def run_ui_bot():
 
         # Remove any existing webhook first (important for Render restarts)
         await updater.bot.delete_webhook()
-        asyncio.sleep(1) # Give a moment for the delete to process
+        await asyncio.sleep(1) # Give a moment for the delete to process
 
         updater.start_webhook(
             listen="0.0.0.0",
@@ -259,8 +259,12 @@ async def run_ui_bot():
         )
 
         logger.info("UI bot webhook started.")
-        # Keep the updater running
-        updater.idle()
+        # Keep the updater running (replace updater.idle())
+        # updater.idle() is synchronous and blocks. We need an async way.
+        # The webhook server runs in the background; the task just needs to stay alive.
+        while True:
+            await asyncio.sleep(3600) # Sleep for a long time to keep the task alive
+
         logger.info("UI bot webhook stopped.")
 
     except Exception as e:
