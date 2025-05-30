@@ -102,7 +102,7 @@ class ConfigValidator:
     
     def _validate_urls(self, config: Dict[str, Any]) -> None:
         """Validate URL format"""
-        for url_key in ['portfolio_url', 'cv_url']:
+        for url_key in ['portfolio_url']:
             url = config.get(url_key)
             if url and not (url.startswith('http://') or url.startswith('https://')):
                 logger.warning(f"Invalid URL format for {url_key}: {url}")
